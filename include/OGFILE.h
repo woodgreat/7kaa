@@ -41,7 +41,6 @@ public:
 
    // Reads the given file and fills the save game info from the header. Returns true if successful.
    static bool read_header(const char* filePath, SaveGameInfo* /*out*/ saveGameInfo);
-
    static const char *status_str();
 
 public:

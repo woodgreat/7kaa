@@ -171,13 +171,16 @@ static void disp_score()
 	int	 finalScore = totalScore * difficultyRating / 100;
 	String str;
 
-	// TRANSLATORS: Final Score:  <Number> X
-	snprintf( str, MAX_STR_LEN+1, _("Final Score:  %s X "), misc.format(totalScore) );
+	str  = _("Final Score");
+	str += ":  ";
+	str += misc.format(totalScore);
+	str += " X ";
 
 	int x2 = font_san.put( x, y+12, str ) + 5;
 
-	// TRANSLATORS: <Number> (Difficulty Rating)
-	snprintf( str, MAX_STR_LEN+1, _("%s (Difficulty Rating)"), misc.format(difficultyRating) );
+	str  = misc.format(difficultyRating);
+	str += " ";
+	str += _("(Difficulty Rating)");
 
 	font_san.center_put( x2, y+1, x2+156, y+15, str );
 	vga_back.bar( x2   , y+16, x2+156, y+17, V_BLACK );
@@ -187,13 +190,19 @@ static void disp_score()
 
 	if( nation_array[viewNationRecno]->cheat_enabled_flag )
 	{
-		str = _("X  0 (Cheated)  =  0");
+		str  = "X  0 ";
+		str += _("(Cheated)");
+		str += "  ";
+
+		finalScore = 0;
 	}
 	else
 	{
-		str = "=  ";
-		str += finalScore;
+		str = "";
 	}
+
+	str += "=  ";
+	str += finalScore;
 
 	font_san.put( x2+170, y+12, str);
 
@@ -457,10 +466,22 @@ void Info::set_rank_data(int onlyHasContact)
 //----------- End of static function Info::set_rank_data -----------//
 
 
+const char *rank_num_th[MAX_NATION] =
+{
+	// TRANSLATORS: Ordinal number for ranking players
+	N_("1st"),
+	N_("2nd"),
+	N_("3rd"),
+	N_("4th"),
+	N_("5th"),
+	N_("6th"),
+	N_("7th"),
+};
 //-------- Begin of function Info::get_rank_pos_str --------//
 //
 char* Info::get_rank_pos_str(int rankType, int nationRecno)
 {
+	static String rank_pos_msg;
 	Nation* viewingNation = NULL; 
 	int curNationRankData = nation_rank_data_array[rankType-1][nationRecno-1];
 	int rankPos=1;
@@ -480,7 +501,8 @@ char* Info::get_rank_pos_str(int rankType, int nationRecno)
 			rankPos++;
 	}
 
-	return misc.num_th(rankPos);
+	rank_pos_msg = _(rank_num_th[rankPos-1]);
+	return rank_pos_msg;
 }
 //----------- End of function Info::get_rank_pos_str -----------//
 

@@ -197,6 +197,8 @@ int GameFile::load_game(const char* filePath, SaveGameInfo* /*out*/ saveGameInfo
 	if (rc > 0)
 	{
 		*saveGameInfo = saveGameHeader.info;
+		strncpy(scenario_file_name, saveGameInfo->file_name, FilePath::MAX_FILE_PATH);
+		scenario_file_name[FilePath::MAX_FILE_PATH] = 0;
 	}
 
 	return rc;
@@ -239,7 +241,6 @@ bool GameFile::read_header(const char* filePath, SaveGameInfo* /*out*/ saveGameI
 	return success;
 }
 //--------- End of function GameFile::read_header --------//
-
 
 //-------- Begin of function GameFile::save_process -------//
 //

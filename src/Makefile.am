@@ -6,6 +6,7 @@ endif
 bin_PROGRAMS = 7kaa
 7kaa_SOURCES = \
 	AM.cpp \
+	ConfigAdv.cpp \
 	CmdLine.cpp \
 	LocaleRes.cpp \
 	OAI_ACT.cpp \
@@ -271,6 +272,7 @@ bin_PROGRAMS = 7kaa
 	OW_ROCK.cpp \
 	OW_SOUND.cpp \
 	OW_WALL.cpp \
+	PlayerStats.cpp \
 	ReplayFile.cpp \
 	dbglog.cpp \
 	file_input_stream.cpp \

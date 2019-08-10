@@ -274,6 +274,7 @@ int Sys::init_directx()
       DEBUG_LOG("Attempt vga_true_front.init_front()");
       vga_true_front.init(1);
       DEBUG_LOG("Attempt vga.activate_pal()");
+      vga.activate_pal (&vga_front);
       vga.activate_pal(&vga_true_front);
       DEBUG_LOG("vga.activate_pal() finish");
    }
@@ -294,10 +295,6 @@ int Sys::init_directx()
    DEBUG_LOG("Attempt vga_back.lock_buf()");
    vga_back.lock_buf();
    DEBUG_LOG("vga_back.lock_buf() finish");
-
-#if !defined(DEBUG) && !defined(_DEBUG)
-   vga.set_full_screen_mode(cmd_line.full_screen_mode);
-#endif
 
    //---------- Initialize Audio ----------//
 
@@ -832,14 +829,15 @@ void Sys::main_loop(int isLoadedGame)
                LOG_END;
 
                // -------- compare objects' crc --------- //
-					// ###### patch begin Gilbert 20/1 ######//
-					if( remote.is_enable() && (remote.sync_test_level & 2) &&(frame_count % (remote.get_process_frame_delay()+3)) == 0)
+               // ###### patch begin Gilbert 20/1 ######//
+               if( (remote.is_enable() || remote.is_replay()) && (remote.sync_test_level & 2) && (frame_count % (remote.get_process_frame_delay()+3)) == 0 )
                {
                   // cannot compare every frame, as PROCESS_FRAME_DELAY >= 1
                   crc_store.record_all();
-                  crc_store.send_all();
+                  if( !remote.is_replay() )
+                     crc_store.send_all();
                }
-					// ###### patch end Gilbert 20/1 ######//
+               // ###### patch end Gilbert 20/1 ######//
 
             }
          }
@@ -889,8 +887,8 @@ void Sys::main_loop(int isLoadedGame)
 								if( !nation_array.is_deleted(nationRecno) )
 								{
 									String newsStr;
-									// TRANSLATORS: Waiting for <King's Kingdom>
-									snprintf( newsStr, MAX_STR_LEN+1, _("Waiting for %s"), nation_array[nationRecno]->nation_name() );
+									// TRANSLATORS: Waiting for <King>'s Kingdom
+									snprintf( newsStr, MAX_STR_LEN+1, _("Waiting for %s's Kingdom"), nation_array[nationRecno]->king_name(1) );
 									int x2 = font_news.put( x, y, newsStr );
 									y += font_news.height() + 5;
 								}
@@ -2441,7 +2439,7 @@ static int detect_scenario_cheat_key(unsigned scanCode, unsigned skeyState)
          keyProcessed++;
          break;
 
-      case 's':
+      case 's': //------------ force current-default-view nation (CTRL+F) to surrender to player ------------//
          if( info.default_viewing_nation_recno &&
              nation_array.player_recno &&
              nation_array[info.default_viewing_nation_recno]->is_ai() )
@@ -2450,6 +2448,18 @@ static int detect_scenario_cheat_key(unsigned scanCode, unsigned skeyState)
          }
          keyProcessed++;
          break;
+
+      case 'y': //-- cause independent/rebel town to found a new nation --//
+          if( town_array.selected_recno )
+          {
+              townPtr = town_array[town_array.selected_recno];
+              if( townPtr->nation_recno == 0 && nation_array.nation_count < MAX_NATION )
+              {
+                  townPtr->form_new_nation();
+              }
+          }
+          keyProcessed++;
+          break;
    }
 
    return keyProcessed;

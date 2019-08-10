@@ -614,14 +614,16 @@ void SaveGameArray::disp_entry_info(const SaveGame* entry, int x, int y)
 
 	//------- display game date --------//
 
-	str  = _("Game Date: ");
+	str  = _("Game Date");
+	str += ": ";
 	str += date.date_str(entry->header.game_date);
 
 	font_bible.put( x, y+30, str );
 
 	//---------------------------------//
 
-	str  = _("File Name: ");
+	str  = _("File Name");
+	str += ": ";
 	str += entry->file_info.name;
 
 	#if(defined(FRENCH))
@@ -632,7 +634,8 @@ void SaveGameArray::disp_entry_info(const SaveGame* entry, int x, int y)
 		font_small.put( x+335, y+16, str );
 	#endif
 
-	str  = _("File Date: ");
+	str  = _("File Date");
+	str += ": ";
 	str += date.date_str(date.julian(entry->file_info.time.year, entry->file_info.time.month, entry->file_info.time.day), 1);
 	str += " ";
 	str += date.time_str(entry->file_info.time.hour*100 + entry->file_info.time.minute);
@@ -670,7 +673,7 @@ int SaveGameArray::process_action(int saveNew)
 		}
 		else           // save on existing slot
 		{
-			if( !box.ask( _("It will overwrite the existing saved game. Proceed?") ) )
+			if( !box.ask( _("Overwrite the existing saved game?") ) )
 				return 0;
 
 			SaveGame* saveGame = (*this)[browse_recno];
@@ -760,17 +763,27 @@ int SaveGameArray::save_new_game(const char* newFileName)
 	SaveGame saveGame;
 	if( SaveGameProvider::save_game(fileName, /*out*/ &saveGame.header) )
 	{
-		strcpy( last_file_name, saveGame.file_info.name );
+		strcpy( last_file_name, fileName );
 
-		if( addFlag )
-		{
-			linkin(&saveGame);
+		FilePath full_path(sys.dir_config);
+		full_path += fileName;
+		Directory saveGameDirectory;
+		saveGameDirectory.read(full_path, 0);  // 0-Don't sort file names
 
-			quick_sort( sort_game_file_function );
-		}
-		else
+		if( saveGameDirectory.size() == 1 )
 		{
-			this->update(&saveGame, gameFileRecno);
+			saveGame.file_info = *saveGameDirectory[1];
+
+			if( addFlag )
+			{
+				linkin(&saveGame);
+
+				quick_sort( sort_game_file_function );
+			}
+			else
+			{
+				this->update(&saveGame, gameFileRecno);
+			}
 		}
 
 		return 1;

@@ -34,6 +34,7 @@
 #include <dbglog.h>
 #include "gettext.h"
 #include <FilePath.h>
+#include <OGAME.h>
 
 #ifdef USE_WINDOWS
 #include <io.h>
@@ -41,6 +42,9 @@
 #ifdef USE_POSIX
 #include <unistd.h>
 #endif
+
+// Both in AM.cpp
+extern Misc misc;
 
 DBGLOG_DEFAULT_CHANNEL(SaveGameProvider);
 
@@ -178,7 +182,9 @@ int SaveGameProvider::load_game(const char* fileName, SaveGameInfo* /*out*/ save
 int SaveGameProvider::load_scenario(const char* filePath)
 {
 	SaveGameInfo saveGameInfo;
-	return load_game_from_file(filePath, /*out*/ &saveGameInfo);
+	auto rc = load_game_from_file(filePath, /*out*/ &saveGameInfo);
+	misc.extract_file_name(scenario_file_name, filePath);
+	return rc;
 }
 //-------- End of function SaveGameProvider::load_scenario --------//
 
