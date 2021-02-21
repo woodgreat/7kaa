@@ -91,6 +91,7 @@ static Button		button_loyalty_disabled;
 static Button		button_cancel2;
 static ButtonCustom button_skill[MAX_TRAINABLE_SKILL];
 static ButtonCustom button_queue_skill[MAX_TRAINABLE_SKILL];
+static int        queue_train_selected;
 static short      browse_race_recno=1, browse_race_town_recno=0;		// the town which the browse_race displays its info
 static short      recruit_race_count;
 static short		spy_count;
@@ -197,15 +198,18 @@ void Town::detect_info()
 	switch( town_menu_mode )
 	{
 		case TOWN_MENU_MAIN:
-			detect_main_menu();
+			if( detect_main_menu() )
+				return;
 			break;
 
 		case TOWN_MENU_TRAIN:
-			detect_train_menu();
+			if( detect_train_menu() )
+				return;
 			break;
 
 		case TOWN_MENU_SPY:
-			detect_spy_menu();
+			if( detect_spy_menu() )
+				return;
 			break;
 
 		case TOWN_MENU_VIEW_SECRET:
@@ -213,16 +217,43 @@ void Town::detect_info()
 			{
 				town_menu_mode = TOWN_MENU_MAIN;
 				info.disp();
+				return;
 			}
 			break;
 
 		case TOWN_MENU_SET_AUTO_COLLECT_TAX:
-			detect_auto_menu(1);
+			if( detect_auto_menu(1) )
+				return;
 			break;
 
 		case TOWN_MENU_SET_AUTO_GRANT:
-			detect_auto_menu(0);
+			if( detect_auto_menu(0) )
+				return;
 			break;
+	}
+
+	if( ISKEY(KEYEVENT_OBJECT_PREV) )
+	{
+		town_array.disp_next(-1, 0);    // previous same object type of any nation
+		return;
+	}
+
+	if( ISKEY(KEYEVENT_OBJECT_NEXT) )
+	{
+		town_array.disp_next(1, 0);     // next same object type of any nation
+		return;
+	}
+
+	if( ISKEY(KEYEVENT_NATION_OBJECT_PREV) )
+	{
+		town_array.disp_next(-1, 1);    // prevous same object type of the same nation
+		return;
+	}
+
+	if( ISKEY(KEYEVENT_NATION_OBJECT_NEXT) )
+	{
+		town_array.disp_next(1, 1);     // next same object type of the same nation
+		return;
 	}
 }
 //----------- End of function Town::detect_info -----------//
@@ -485,14 +516,14 @@ void Town::disp_auto_loyalty()
 
 //--------- Begin of function Town::detect_main_menu ---------//
 //
-void Town::detect_main_menu()
+int Town::detect_main_menu()
 {
 	//--- detect clicking on the name area to center the map on it ---//
 
 	if( mouse.single_click(INFO_X1, INFO_Y1, INFO_X2, INFO_Y1+21) )
 	{
 		world.go_loc( center_x, center_y );
-		return;
+		return 1;
 	}
 
 	//-------- detect browsers ---------//
@@ -504,6 +535,7 @@ void Town::detect_main_menu()
 		if( sys.debug_session || sys.testing_session )
 			disp_debug_resistance(INFO_UPDATE);
 		// ##### end patch Gilbert 21/1 #######//
+		return 1;
 	}
 
 	if( button_spy.detect() )	// switch to the spy menu
@@ -512,7 +544,7 @@ void Town::detect_main_menu()
 		disable_refresh = 1;    // static var for disp_info() only
 		info.disp();
 		disable_refresh = 0;
-		return;
+		return 1;
 	}
 
 	//----- detect granting to an independent town ---//
@@ -525,18 +557,19 @@ void Town::detect_main_menu()
 			se_ctrl.immediate_sound("TURN_ON");
 
 			grant_to_non_own_town(nation_array.player_recno, COMMAND_PLAYER);
+			return 1;
 		}
 	}
 
 	//---------- buttons for player town only --------//
 
 	if( nation_recno!=nation_array.player_recno )
-		return;
+		return 0;
 
 	//------ update button status ------//
 
 	if( browse_race.recno() > race_filter() )
-		return;
+		return 0;
 
 	int raceId = race_filter(browse_race.recno());
 
@@ -552,16 +585,19 @@ void Town::detect_main_menu()
 
 	//------- detect buttons --------//
 
-	if( button_recruit.detect('R') )
+	if( button_recruit.detect(GETKEY(KEYEVENT_TOWN_RECRUIT)) )
+	{
 		recruit(-1, 0, COMMAND_PLAYER);
+		return 1;
+	}
 
-	if( button_train.detect('B') )
+	if( button_train.detect(GETKEY(KEYEVENT_TOWN_TRAIN)) )
 	{
 		town_menu_mode = TOWN_MENU_TRAIN;
 		disable_refresh = 1;    // static var for disp_info() only
 		info.disp();
 		disable_refresh = 0;
-		return;
+		return 1;
 	}
 
 	int rc;
@@ -585,6 +621,7 @@ void Town::detect_main_menu()
 			info.disp();
 			disable_refresh = 0;
 		}
+		return 1;
 	}
 
 	if( (rc=button_grant.detect(0, 0, 1)) > 0 )
@@ -606,6 +643,7 @@ void Town::detect_main_menu()
 			info.disp();
 			disable_refresh = 0;
 		}
+		return 1;
 	}
 
 	if(train_unit_recno)
@@ -622,8 +660,11 @@ void Town::detect_main_menu()
 				short *shortPtr = (short *)remote.new_send_queue_msg(MSG_TOWN_SKIP_RECRUIT, sizeof(short));
 				shortPtr[0] = town_recno;
 			}
+			return 1;
 		}
 	}
+
+	return 0;
 }
 //----------- End of function Town::detect_main_menu -----------//
 
@@ -916,11 +957,22 @@ static void i_disp_skill_button(ButtonCustom *button, int repaintBody)
 		vga_front.put_bitmap_trans_decompress(x1, y1+4, bitmapPtr);
 
 		// put name
+		String str2;
+
+		str2 = "";
+
+		if( skillId == queue_train_selected )
+			str2 += ">";
 
 		if( skillId == SKILL_MFT )
-			font_bible.put(x1+50, y1+11, _("Manufacturing") );		// the string in skill_str_array[] is "Manufacture".
+			str2 += _("Manufacturing");		// the string in skill_str_array[] is "Manufacture".
 		else
-			font_bible.put(x1+50, y1+11, _(Skill::skill_str_array[skillId-1]));
+			str2 += _(Skill::skill_str_array[skillId-1]);
+
+		if( skillId == queue_train_selected )
+			str2 += "<";
+
+		font_bible.put(x1+50, y1+11, str2);
 	}
 
 	// display small button
@@ -988,7 +1040,7 @@ static void i_disp_queue_skill_button(ButtonCustom *button, int repaintBody)
 
 //--------- Begin of function Town::detect_train_menu ---------//
 //
-void Town::detect_train_menu()
+int Town::detect_train_menu()
 {
 	int	x=INFO_X1+2, y=INFO_Y1+24, rc, quitFlag, waitFlag;
 
@@ -1063,7 +1115,7 @@ void Town::detect_train_menu()
 				info.update();
 			// ####### end Gilbert 10/9 ######//
 
-			return;
+			return 1;
 		}
 
 		y += BUTTON_ACTION_HEIGHT;
@@ -1077,7 +1129,98 @@ void Town::detect_train_menu()
 		// ##### end Gilbert 26/9 ########//
       town_menu_mode = TOWN_MENU_MAIN;
 		info.disp();
+		return 1;
 	}
+
+	//------ detect production selecting hotkeys --------//
+
+	if( ISKEY(KEYEVENT_MANUF_QUEUE_UP) )
+	{
+		queue_train_selected--;
+		if( queue_train_selected <= 0 )
+			queue_train_selected = MAX_TRAINABLE_SKILL;
+		disp_train_menu(INFO_REPAINT);
+		return 1;
+	}
+
+	if( ISKEY(KEYEVENT_MANUF_QUEUE_DOWN) )
+	{
+		queue_train_selected++;
+		if( queue_train_selected > MAX_TRAINABLE_SKILL )
+			queue_train_selected = 1;
+		disp_train_menu(INFO_REPAINT);
+		return 1;
+	}
+
+	if( queue_train_selected && ISKEY(KEYEVENT_MANUF_QUEUE_ADD) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <town recno> <skill id> <race id> <amount>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_TOWN_RECRUIT, 4*sizeof(short) );
+			shortPtr[0] = town_recno;
+			shortPtr[1] = queue_train_selected;
+			shortPtr[2] = race_filter(browse_race.recno());
+			shortPtr[3] = 1;
+		}
+		else
+			add_queue(queue_train_selected, race_filter(browse_race.recno()), 1);
+		se_ctrl.immediate_sound("TURN_ON");
+		return 1;
+	}
+
+	if( queue_train_selected && ISKEY(KEYEVENT_MANUF_QUEUE_ADD_BATCH) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <town recno> <skill id> <race id> <amount>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_TOWN_RECRUIT, 4*sizeof(short) );
+			shortPtr[0] = town_recno;
+			shortPtr[1] = queue_train_selected;
+			shortPtr[2] = race_filter(browse_race.recno());
+			shortPtr[3] = TOWN_TRAIN_BATCH_COUNT;
+		}
+		else
+			add_queue(queue_train_selected, race_filter(browse_race.recno()), TOWN_TRAIN_BATCH_COUNT);
+		se_ctrl.immediate_sound("TURN_ON");
+		return 1;
+	}
+
+	if( queue_train_selected && ISKEY(KEYEVENT_MANUF_QUEUE_REMOVE) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <town recno> <skill id> <race id> <amount>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_TOWN_RECRUIT, 4*sizeof(short) );
+			shortPtr[0] = town_recno;
+			shortPtr[1] = queue_train_selected;
+			shortPtr[2] = -1;		// -1 race_id represent remove queue
+			shortPtr[3] = 1;
+		}
+		else
+			remove_queue(queue_train_selected, 1);
+		se_ctrl.immediate_sound("TURN_OFF");
+		return 1;
+	}
+
+	if( queue_train_selected && ISKEY(KEYEVENT_MANUF_QUEUE_REMOVE_BATCH) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <town recno> <skill id> <race id> <amount>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_TOWN_RECRUIT, 4*sizeof(short) );
+			shortPtr[0] = town_recno;
+			shortPtr[1] = queue_train_selected;
+			shortPtr[2] = -1;		// -1 race_id represent remove queue
+			shortPtr[3] = TOWN_TRAIN_BATCH_COUNT;
+		}
+		else
+			remove_queue(queue_train_selected, TOWN_TRAIN_BATCH_COUNT);
+		se_ctrl.immediate_sound("TURN_OFF");
+		return 1;
+	}
+
+	return 0;
 }
 //----------- End of function Town::detect_train_menu -----------//
 
@@ -1097,20 +1240,19 @@ void Town::disp_auto_menu(int modeCollectTax)
 
 	//---------- paint buttons ------------//
 
-	const char* headingStr;
+	String headingStr;
 
 	if( modeCollectTax )
 		headingStr = _("Automatically Collect Tax from Villagers when their Loyalty reaches:");
 	else
 		headingStr = _("Automatically Grant Money to Villagers when their Loyalty drops below:");
 
-	const char* clickStr = _("(Left-click below to apply to this village. Right-click below to apply to all your villages.)");
+	headingStr += "\n";
+	headingStr += _("(Left-click below to apply to this village. Right-click below to apply to all your villages.)");
 
 	vga_util.d3_panel_up( INFO_X1, INFO_Y1, INFO_X2, INFO_Y1+110 );
 
 	font_san.put_paragraph( INFO_X1+7, INFO_Y1+8, INFO_X2-7, INFO_Y2-5, headingStr );
-
-	font_san.put_paragraph( INFO_X1+7, INFO_Y1+58, INFO_X2-7, INFO_Y2-5, clickStr );
 
 	int i, loyaltyLevel, y=INFO_Y1+114;
 
@@ -1127,7 +1269,7 @@ void Town::disp_auto_menu(int modeCollectTax)
 
 //--------- Begin of function Town::detect_auto_menu ---------//
 //
-void Town::detect_auto_menu(int modeCollectTax)
+int Town::detect_auto_menu(int modeCollectTax)
 {
 	int i, rc=0, loyaltyLevel;
 
@@ -1240,7 +1382,10 @@ void Town::detect_auto_menu(int modeCollectTax)
 		// ##### begin Gilbert 26/9 ########//
 		town_menu_mode = TOWN_MENU_MAIN;
 		info.disp();
+		return 1;
 	}
+
+	return 0;
 }
 //----------- End of function Town::detect_auto_menu -----------//
 
@@ -1338,7 +1483,7 @@ void Town::disp_spy_menu(int refreshFlag)
 
 //--------- Begin of function Town::detect_spy_menu ---------//
 //
-void Town::detect_spy_menu()
+int Town::detect_spy_menu()
 {
 	browse_spy.detect();
 
@@ -1362,6 +1507,7 @@ void Town::detect_spy_menu()
 			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_SPY_LEAVE_TOWN, sizeof(short) );
 			*shortPtr = spyPtr->spy_recno;
 		}
+		return 1;
 	}
 
 	//------ reward spy ---------//
@@ -1369,6 +1515,7 @@ void Town::detect_spy_menu()
 	else if( button_spy_reward.detect() )
 	{
 		spyPtr->reward(COMMAND_PLAYER);
+		return 1;
 	}
 
 	//----- change spy action --------//
@@ -1388,6 +1535,7 @@ void Town::detect_spy_menu()
 				short *shortPtr = (short *)remote.new_send_queue_msg(MSG_SPY_CYCLE_ACTION, sizeof(short) );
 				*shortPtr = spyPtr->spy_recno;
 			}
+			return 1;
 		}
 	}
 
@@ -1402,13 +1550,19 @@ void Town::detect_spy_menu()
 			disable_refresh = 1;
 			info.disp();
 			disable_refresh = 0;
+			return 1;
 		}
 	}
 
 	//--------- cancel -----------//
 
 	if( button_cancel.detect() || mouse.any_click(1) )		// right click to cancel
+	{
 		info.disp();
+		return 1;
+	}
+
+	return 0;
 }
 //----------- End of function Town::detect_spy_menu -----------//
 

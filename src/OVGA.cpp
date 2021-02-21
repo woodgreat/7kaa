@@ -390,7 +390,7 @@ void Vga::handle_messages()
             case SDL_WINDOWEVENT_FOCUS_GAINED:
             case SDL_WINDOWEVENT_RESTORED:
                sys.need_redraw_flag = 1;
-               if( !sys.is_mp_game )
+               if( !sys.is_mp_game && config_adv.vga_pause_on_focus_loss )
                   sys.unpause();
 
                // update ctrl/shift/alt key state
@@ -401,7 +401,7 @@ void Vga::handle_messages()
             //case SDL_WINDOWEVENT_LEAVE: // Do not respond to mouse focus
             case SDL_WINDOWEVENT_FOCUS_LOST:
             case SDL_WINDOWEVENT_MINIMIZED:
-               if( !sys.is_mp_game )
+               if( !sys.is_mp_game && config_adv.vga_pause_on_focus_loss )
                   sys.pause();
                // turn the system cursor back on to get around a fullscreen
                // mouse grabbed problem on windows
@@ -532,6 +532,8 @@ void Vga::handle_messages()
                   set_mouse_mode( MOUSE_INPUT_ABS );
             }
          }
+         if( SDL_IsTextInputActive() && event.key.keysym.sym >= SDLK_SPACE && event.key.keysym.sym <= SDLK_z )
+		bypass = 1;
          if( !bypass )
          {
             mouse.update_skey_state();
@@ -543,6 +545,9 @@ void Vga::handle_messages()
          mouse.update_skey_state();
          break;
       case SDL_TEXTINPUT:
+         mouse.add_typing_event(event.text.text, misc.get_time());
+         break;
+      case SDL_TEXTEDITING:
       case SDL_JOYAXISMOTION:
       case SDL_JOYBALLMOTION:
       case SDL_JOYHATMOTION:
@@ -567,7 +572,7 @@ void Vga::flag_redraw()
 //
 int Vga::is_full_screen()
 {
-   return ((SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0);
+   return ((SDL_GetWindowFlags(window) & (SDL_WINDOW_FULLSCREEN|SDL_WINDOW_FULLSCREEN_DESKTOP)) != 0);
 }
 //-------- End of function Vga::is_full_screen ----------//
 
@@ -630,17 +635,19 @@ void Vga::update_mouse_pos()
 void Vga::set_full_screen_mode(int mode)
 {
    int result, mouse_x, mouse_y;
-   uint32_t flags = 0;
+   uint32_t flags = config_adv.vga_full_screen_desktop ?
+      SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN;
 
    switch (mode)
    {
       case -1:
-         flags = is_full_screen() ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP;
+         if( is_full_screen() )
+            flags = 0;
          break;
       case 0:
+         flags = 0;
          break;
       case 1:
-         flags = SDL_WINDOW_FULLSCREEN_DESKTOP;
          break;
       default:
          err_now("invalid mode");
@@ -659,7 +666,7 @@ void Vga::set_full_screen_mode(int mode)
 
    sys.need_redraw_flag = 1;
    boundary_set = 0;
-   if( flags == SDL_WINDOW_FULLSCREEN_DESKTOP )
+   if( flags ) // went full screen
       set_window_grab(WINGRAB_ON);
    else
       set_window_grab(WINGRAB_OFF);
@@ -824,6 +831,9 @@ void Vga::save_status_report()
       fprintf(file, "Big endian\n");
    else
       fprintf(file, "Little endian\n");
+#ifndef HAVE_KNOWN_BUILD
+   fprintf(file, "Binary built using unsupported configuration\n");
+#endif
 
    s = SDL_GetCurrentVideoDriver();
    fprintf(file, "Current SDL video driver: %s\n", s);
@@ -898,9 +908,15 @@ void Vga::save_status_report()
       SDL_Rect rect;
       SDL_DisplayMode mode;
       float ddpi, hdpi, vdpi;
-      fprintf(file, "-- Display %d --\n", i);
-      if( !SDL_GetCurrentDisplayMode(i, &mode) )
-         fprintf(file, "Mode: %dx%dx%ubpp %dHz format=%s driver=%p\n", mode.w, mode.h, SDL_BITSPERPIXEL(mode.format), mode.refresh_rate, SDL_GetPixelFormatName(mode.format), mode.driverdata);
+      int num_modes, cur_mode, j;
+      num_modes = SDL_GetNumDisplayModes(i);
+      cur_mode = SDL_GetCurrentDisplayMode(i, NULL);
+      fprintf(file, "-- Display %d using mode %d--\n", i, cur_mode);
+      for( j=0; j<num_modes; j++ )
+      {
+          if( !SDL_GetDisplayMode(i, j, &mode) )
+              fprintf(file, "Mode %d: %dx%dx%ubpp %dHz format=%s driver=%p\n", j, mode.w, mode.h, SDL_BITSPERPIXEL(mode.format), mode.refresh_rate, SDL_GetPixelFormatName(mode.format), mode.driverdata);
+      }
       if( !SDL_GetDisplayDPI(i, &ddpi, &hdpi, &vdpi) )
          fprintf(file, "DPI: diag=%f horiz=%f vert=%f\n", ddpi, hdpi, vdpi);
       if( !SDL_GetDisplayBounds(i, &rect) )
@@ -1007,7 +1023,8 @@ static int init_window_flags()
 {
    int flags = 0;
    if( config_adv.vga_full_screen )
-      flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+      flags |= config_adv.vga_full_screen_desktop ?
+         SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN;
    if( config_adv.vga_allow_highdpi )
       flags |= SDL_WINDOW_ALLOW_HIGHDPI;
    return flags;
@@ -1015,6 +1032,14 @@ static int init_window_flags()
 
 static void init_window_size()
 {
+   if( !config_adv.vga_full_screen_desktop )
+   {
+      // must match game's native resolution
+      config_adv.vga_window_width = 800;
+      config_adv.vga_window_height = 600;
+      return;
+   }
+
    if( config_adv.vga_window_width && config_adv.vga_window_height )
       return;
 

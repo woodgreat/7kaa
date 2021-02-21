@@ -986,6 +986,7 @@ void Game::load_mp_game(char *fileName, int lobbied, char *game_host)
 	if( !mp_select_load_option(fileName) )
 	{
 		remote.deinit();
+		mp_close_session();
 #ifdef HAVE_LIBCURL
 		ws.deinit();
 #endif
@@ -1023,6 +1024,8 @@ void Game::load_mp_game(char *fileName, int lobbied, char *game_host)
 	remote.handle_vga_lock = 0;	// disable lock handling
 
 	sys.signal_exit_flag = 0; // Richard 24-12-2013: If player tried to exit just as the game loaded, cancel the exit request
+
+	sys.set_speed(9, COMMAND_AUTO);	// set load game speed
 
 	battle.run_loaded();		// 1-multiplayer game
 
@@ -1602,9 +1605,9 @@ int Game::input_box(const char *tell_string, char *buf, int len, char hide_input
 // The return is 1 when ok is pressed, and 0 when cancel is pressed.
 int Game::input_name_pass(const char *txt[], char *name, int name_len, char *pass, int pass_len)
 {
-	const char *title = txt[0];
-	const char *inputFieldDes1 = txt[1];
-	const char *inputFieldDes2 = txt[2];
+	const char *title = _(txt[0]);
+	const char *inputFieldDes1 = _(txt[1]);
+	const char *inputFieldDes2 = _(txt[2]);
 	const char *buttonDes1 = _("Ok");
 	const char *buttonDes2 = _("Cancel");
 	const int box_button_margin = 32; // BOX_BUTTON_MARGIN
@@ -2381,6 +2384,7 @@ int Game::mp_select_option(NewNationPara *nationPara, int *mpPlayerCount)
 	int regPlayerCount = 0;
 	int selfReadyFlag = 0;
 	int shareRace = 1;		// host only, 0= exclusive race of each player
+	int recvEndSetting = 0;
 	int p;
 
 	int i;
@@ -3344,10 +3348,6 @@ int Game::mp_select_option(NewNationPara *nationPara, int *mpPlayerCount)
 								mRefreshFlag |= MGOPTION_PLAYERS;
 							}
 						}
-						if (remote.is_host) {
-							// forward message to everyone
-							mp_obj.send(BROADCAST_PID, recvPtr, sizeof(MpStructPlayerReady));
-						}
 					}
 					break;
 				case MPMSG_PLAYER_UNREADY:
@@ -3359,10 +3359,6 @@ int Game::mp_select_option(NewNationPara *nationPara, int *mpPlayerCount)
 								playerReadyFlag[p] = 0;
 								mRefreshFlag |= MGOPTION_PLAYERS;
 							}
-						}
-						if (remote.is_host) {
-							// forward message to everyone
-							mp_obj.send(BROADCAST_PID, recvPtr, sizeof(MpStructPlayerUnready));
 						}
 					}
 					break;
@@ -3377,6 +3373,9 @@ int Game::mp_select_option(NewNationPara *nationPara, int *mpPlayerCount)
 					remote.sync_test_level = ((MpStructSyncLevel *)recvPtr)->sync_test_level;
 					break;
 				// ###### patch end Gilbert 22/1 ######//
+				case MPMSG_END_SETTING:
+					++recvEndSetting;
+					break;
 				case MPMSG_REFUSE_NEW_PLAYER:
 					switch (((MpStructRefuseNewPlayer *)recvPtr)->reason)
 					{
@@ -4197,7 +4196,6 @@ int Game::mp_select_option(NewNationPara *nationPara, int *mpPlayerCount)
 
 			trial = 5000;
 			startTime = misc.get_time();
-			int recvEndSetting = 0;
 			while( --trial > 0 || misc.get_time() - startTime < 10000 )
 			{
 				if( recvEndSetting >= playerCount-1)
@@ -4210,10 +4208,6 @@ int Game::mp_select_option(NewNationPara *nationPara, int *mpPlayerCount)
 					if( ((MpStructBase *)recvPtr)->msg_id == MPMSG_END_SETTING )
 					{
 						recvEndSetting++;
-					}
-					if (remote.is_host) {
-						// forward message to everyone
-						mp_obj.send(BROADCAST_PID, recvPtr, sizeof(MpStructBase));
 					}
 				}
 			}
@@ -4290,6 +4284,7 @@ int Game::mp_select_load_option(char *fileName)
 	int selfReadyFlag = 0;
 	int maxPlayer;
 	int shareRace = 1;		// host only, 0= exclusive race of each player
+	int recvEndSetting = 0;
 	int p;
 
 	err_when( tempConfig.race_id != (~nation_array)->race_id );
@@ -5138,10 +5133,6 @@ int Game::mp_select_load_option(char *fileName)
 								mRefreshFlag |= MGOPTION_PLAYERS;
 							}
 						}
-						if (remote.is_host) {
-							// forward message to everyone
-							mp_obj.send(BROADCAST_PID, recvPtr, sizeof(MpStructPlayerReady));
-						}
 					}
 					break;
 				case MPMSG_PLAYER_UNREADY:
@@ -5153,10 +5144,6 @@ int Game::mp_select_load_option(char *fileName)
 								playerReadyFlag[p] = 0;
 								mRefreshFlag |= MGOPTION_PLAYERS;
 							}
-						}
-						if (remote.is_host) {
-							// forward message to everyone
-							mp_obj.send(BROADCAST_PID, recvPtr, sizeof(MpStructPlayerUnready));
 						}
 					}
 					break;
@@ -5578,6 +5565,9 @@ int Game::mp_select_load_option(char *fileName)
 					++recvSyncTestLevel;
 					offset += sizeof( MpStructSyncLevel );
 					break;
+				case MPMSG_END_SETTING:
+					++recvEndSetting;
+					break;
 				}  // end switch
 
 				if( !recvStartMsg || offset <= oldOffset )
@@ -5607,12 +5597,7 @@ int Game::mp_select_load_option(char *fileName)
 			}
 			err_when( recvSetFrameDelay > 1 );
 			err_when( recvSyncTestLevel > 1 );
-
-			// ------- send end setting string ------- //
-
-			MpStructBase mpEndSetting(MPMSG_END_SETTING);
-			mp_obj.send( from, &mpEndSetting, sizeof(mpEndSetting) );
-		}	
+		}
 
 		if( remote.sync_test_level == 0)
 		{
@@ -5630,7 +5615,6 @@ int Game::mp_select_load_option(char *fileName)
 
 			trial = 5000;
 			startTime = misc.get_time();
-			int recvEndSetting = 0;
 			while( --trial > 0 || misc.get_time() - startTime < 10000 )
 			{
 				if( recvEndSetting >= playerCount-1)

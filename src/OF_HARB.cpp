@@ -83,9 +83,10 @@ static Button3D		button_build, button_sail;
 static Button3D		button_cancel_build;
 static ButtonGroup	button_mode(2);
 // ###### begin Gilbert 20/9 #######//
-// static short                 button_unit_id[MAX_SHIP_TYPE];
+static short                 button_unit_id[MAX_SHIP_TYPE];
 static ButtonCustom     button_ship[MAX_SHIP_TYPE];
 static ButtonCustom     button_queue_ship[MAX_SHIP_TYPE];
+static int queue_ship_selected = -1;
 // ###### end Gilbert 20/9 #######//
 static int				added_count;
 static ButtonCustom	button_cancel;
@@ -275,18 +276,18 @@ void FirmHarbor::put_info(int refreshFlag)
 
 //--------- Begin of function FirmHarbor::detect_info ---------//
 //
-void FirmHarbor::detect_info()
+int FirmHarbor::detect_info()
 {
 	switch( harbor_menu_mode )
 	{
 		case HARBOR_MENU_MAIN:
-			detect_main_menu();
-			break;
+			return detect_main_menu();
 
 		case HARBOR_MENU_BUILD:
-			detect_build_menu();
-			break;
+			return detect_build_menu();
 	}
+
+	return 0;
 }
 //----------- End of function FirmHarbor::detect_info -----------//
 
@@ -353,36 +354,43 @@ void FirmHarbor::disp_main_menu(int refreshFlag)
 
 //--------- Begin of function FirmHarbor::detect_main_menu ---------//
 //
-void FirmHarbor::detect_main_menu()
+int FirmHarbor::detect_main_menu()
 {
 	firm_harbor_ptr = this;
 
 	if( detect_basic_info() )
-		return;
+		return 1;
 
 	if( !own_firm() )
-		return;
+		return 0;
 
 	if( browse_ship.detect() )
+	{
 		put_det(INFO_UPDATE);
+		return 1;
+	}
 
 	if( detect_det() )
-		return;
+		return 1;
 
 	//------- detect the build button ---------//
 
-	if( button_build.detect('B') )
+	if( button_build.detect(GETKEY(KEYEVENT_FIRM_BUILD)) )
 	{
 		harbor_menu_mode = HARBOR_MENU_BUILD;
 		disable_refresh = 1;    // static var for disp_info() only
 		info.disp();
 		disable_refresh = 0;
+		return 1;
 	}
 
 	//-------- detect the sail button ---------//
 
-	if( button_sail.detect('R') && browse_ship.recno() > 0 )
+	if( button_sail.detect(GETKEY(KEYEVENT_FIRM_PATROL)) && browse_ship.recno() > 0 )
+	{
 		sail_ship( ship_recno_array[browse_ship.recno()-1], COMMAND_PLAYER );
+		return 1;
+	}
 
 	//---------- detect cancel build button -----------//
 	if(build_unit_id)
@@ -396,8 +404,11 @@ void FirmHarbor::detect_main_menu()
 				short *shortPtr = (short *)remote.new_send_queue_msg(MSG_F_HARBOR_SKIP_SHIP, sizeof(short));
 				shortPtr[0] = firm_recno;
 			}
+			return 1;
 		}
 	}
+
+	return 0;
 }
 //----------- End of function FirmHarbor::detect_main_menu -----------//
 
@@ -614,12 +625,15 @@ void FirmHarbor::disp_build_menu(int refreshFlag)
 						i_disp_build_button, ButtonCustomPara(&button_queue_ship[added_count], unitId) );
 
 					err_when(added_count >= MAX_SHIP_TYPE);
-					// button_unit_id[added_count++] = unitId;
-					added_count++;
+					button_unit_id[added_count++] = unitId;
 					y += BUILD_BUTTON_HEIGHT;
 				}
 			}
 		}
+
+		if( !added_count || queue_ship_selected >= added_count)
+			queue_ship_selected = -1;
+
 		button_cancel.paint(x, y, x+BUILD_BUTTON_WIDTH-1, y+BUILD_BUTTON_HEIGHT*3/4,
 			ButtonCustom::disp_text_button_func, ButtonCustomPara((void*)_("Done"),0) );
 	}
@@ -704,7 +718,13 @@ static void i_disp_build_button(ButtonCustom *button, int repaintBody)
 		//-------- display unit name --------//
 
 		String str;
-		str = _(unitInfo->name);
+
+		str = "";
+
+		if( queue_ship_selected>=0 && button_unit_id[queue_ship_selected] == unitId )
+			str += ">";
+
+		str += _(unitInfo->name);
 
 		if( unitInfo->unit_class == UNIT_CLASS_WEAPON )		// add version no.
 		{
@@ -718,6 +738,9 @@ static void i_disp_build_button(ButtonCustom *button, int repaintBody)
 			}
 		}
 		
+		if( queue_ship_selected >=0 && button_unit_id[queue_ship_selected] == unitId )
+			str += "<";
+
 		font_bible.put( x1+60, y1+13, str );
 	}
 
@@ -810,7 +833,7 @@ static void i_disp_queue_button(ButtonCustom *button, int repaintBody)
 
 //--------- Begin of function FirmHarbor::detect_build_menu ---------//
 //
-void FirmHarbor::detect_build_menu()
+int FirmHarbor::detect_build_menu()
 {
 	int 	 	 unitId, x=INFO_X1+2, y=INFO_Y1, rc, quitFlag, waitFlag;
 	UnitInfo* unitInfo;
@@ -893,7 +916,7 @@ void FirmHarbor::detect_build_menu()
 				info.update();
 			// ######## end Gilbert 20/9 ########//
 
-			return;
+			return 1;
 		}
 
 		y += BUILD_BUTTON_HEIGHT;
@@ -908,7 +931,102 @@ void FirmHarbor::detect_build_menu()
 		// ###### begin Gilbert 26/9 #######//
 		se_ctrl.immediate_sound("TURN_OFF");
 		// ###### end Gilbert 26/9 #######//
+		return 1;
 	}
+
+	//------ detect production selecting hotkeys --------//
+
+	if( added_count>0 && ISKEY(KEYEVENT_MANUF_QUEUE_UP) )
+	{
+		queue_ship_selected--;
+		if( queue_ship_selected < 0 )
+			queue_ship_selected = added_count-1;
+		disp_build_menu(INFO_REPAINT);
+		return 1;
+	}
+
+	if( added_count>0 && ISKEY(KEYEVENT_MANUF_QUEUE_DOWN) )
+	{
+		queue_ship_selected++;
+		if( queue_ship_selected >= added_count )
+			queue_ship_selected = 0;
+		disp_build_menu(INFO_REPAINT);
+		return 1;
+	}
+
+	if( queue_ship_selected>=0 && ISKEY(KEYEVENT_MANUF_QUEUE_ADD) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <firm recno> <unit Id>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_F_HARBOR_BUILD_SHIP, 3*sizeof(short) );
+			shortPtr[0] = firm_recno;
+			shortPtr[1] = button_unit_id[queue_ship_selected];
+			shortPtr[2] = 1;
+		}
+		else
+			add_queue(button_unit_id[queue_ship_selected], 1);
+
+		se_ctrl.immediate_sound("TURN_ON");
+		info.update();
+		return 1;
+	}
+
+	if( queue_ship_selected>=0 && ISKEY(KEYEVENT_MANUF_QUEUE_ADD_BATCH) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <firm recno> <unit Id>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_F_HARBOR_BUILD_SHIP, 3*sizeof(short) );
+			shortPtr[0] = firm_recno;
+			shortPtr[1] = button_unit_id[queue_ship_selected];
+			shortPtr[2] = HARBOR_BUILD_BATCH_COUNT;
+		}
+		else
+			add_queue(button_unit_id[queue_ship_selected], HARBOR_BUILD_BATCH_COUNT);
+
+		se_ctrl.immediate_sound("TURN_ON");
+		info.update();
+		return 1;
+	}
+
+	if( queue_ship_selected>=0 && ISKEY(KEYEVENT_MANUF_QUEUE_REMOVE) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <firm recno> <unit Id>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_F_HARBOR_BUILD_SHIP, 3*sizeof(short) );
+			shortPtr[0] = firm_recno;
+			shortPtr[1] = -button_unit_id[queue_ship_selected];
+			shortPtr[2] = 1;
+		}
+		else
+			remove_queue(button_unit_id[queue_ship_selected], 1);
+
+		se_ctrl.immediate_sound("TURN_OFF");
+		info.update();
+		return 1;
+	}
+
+	if( queue_ship_selected>=0 && ISKEY(KEYEVENT_MANUF_QUEUE_REMOVE_BATCH) )
+	{
+		if( remote.is_enable() )
+		{
+			// packet structure : <firm recno> <unit Id>
+			short *shortPtr = (short *)remote.new_send_queue_msg(MSG_F_HARBOR_BUILD_SHIP, 3*sizeof(short) );
+			shortPtr[0] = firm_recno;
+			shortPtr[1] = -button_unit_id[queue_ship_selected];
+			shortPtr[2] = HARBOR_BUILD_BATCH_COUNT;
+		}
+		else
+			remove_queue(button_unit_id[queue_ship_selected], HARBOR_BUILD_BATCH_COUNT);
+
+		se_ctrl.immediate_sound("TURN_OFF");
+		info.update();
+		return 1;
+	}
+
+	return 0;
 }
 //----------- End of function FirmHarbor::detect_build_menu -----------//
 

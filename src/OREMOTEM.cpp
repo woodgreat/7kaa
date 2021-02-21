@@ -175,6 +175,10 @@ static MsgProcessFP msg_process_function_array[] =
 	&RemoteMsg::compare_remote_object,
 	&RemoteMsg::compare_remote_object,
 	&RemoteMsg::compare_remote_object,
+
+	&RemoteMsg::caravan_copy_route,
+
+	&RemoteMsg::compare_remote_crc,
 };
 
 //---------- Declare static functions ----------//
@@ -1154,6 +1158,36 @@ void RemoteMsg::caravan_del_stop()
 // ------- End of function RemoteMsg::caravan_del_stop ------//
 
 
+// ------- Begin of function RemoteMsg::caravan_copy_route ------//
+void RemoteMsg::caravan_copy_route()
+{
+	err_when( id != MSG_U_CARA_COPY_ROUTE);
+	// packet structure : <unit recno> <copy unit recno>
+	short *shortPtr = (short *)data_buf;
+	short unitCount= 2;
+	validate_selected_unit_array(shortPtr, unitCount);
+
+	if( unitCount > 0)
+	{
+		Unit *unitPtr = unit_array[*shortPtr];
+		UnitCaravan *caravanPtr;
+		if( unitPtr->unit_id != UNIT_CARAVAN)
+		{
+			err_here();
+		}
+		else
+		{
+#ifdef DEBUG_LONG_LOG
+			long_log->printf("caravan %d copy route from %d\n", shortPtr[0], shortPtr[1]);
+#endif
+			caravanPtr = (UnitCaravan *)unitPtr;
+			caravanPtr->copy_route(shortPtr[1], COMMAND_REMOTE);
+		}
+	}
+}
+// ------- End of function RemoteMsg::caravan_copy_route ------//
+
+
 // ------- Begin of function RemoteMsg::ship_unload_unit ---------//
 void RemoteMsg::ship_unload_unit()
 {
@@ -1854,7 +1888,7 @@ void RemoteMsg::firm_reward()
 void RemoteMsg::inn_hire()
 {
 	err_when( id != MSG_F_INN_HIRE);
-	// packet structure : <firm recno>, <hire Id> <nation no>
+	// packet structure : <firm recno> <unit id> <combat level> <skill id> <skill_level> <hire cost> <spy recno> <nation no>
 	short *shortPtr = (short *)data_buf;
 	if( validate_firm(*shortPtr) )
 	{
@@ -1862,10 +1896,10 @@ void RemoteMsg::inn_hire()
 		if(inn)
 		{
 #ifdef DEBUG_LONG_LOG
-			long_log->printf("inn %d hire %d, by nation %d\n", shortPtr[0], shortPtr[1], shortPtr[2]);
+			long_log->printf("inn %d hire %d, by nation %d\n", shortPtr[0], shortPtr[1], shortPtr[7]);
 #endif
-			inn->hire(shortPtr[1]);
-			if( shortPtr[2] == nation_array.player_recno)
+			inn->hire_remote(shortPtr[1], shortPtr[2], shortPtr[3], shortPtr[4], shortPtr[5], shortPtr[6]);
+			if( shortPtr[7] == nation_array.player_recno)
 			{
 				inn->put_info(INFO_REPAINT);
 			}
@@ -2647,7 +2681,13 @@ void RemoteMsg::spy_drop_identity()
 #ifdef DEBUG_LONG_LOG
 		long_log->printf("spy %d drop identity\n", shortPtr[0]);
 #endif
-		spy_array[*shortPtr]->drop_spy_identity();
+		Spy* spyPtr = spy_array[*shortPtr];
+		if( spyPtr->spy_place != SPY_MOBILE ) // message can only be for mobile spy
+			return;
+		short sprite_recno = spyPtr->spy_place_para; // mobile spy
+		spyPtr->drop_spy_identity();
+		if( sprite_recno && sprite_recno == unit_array.selected_recno )
+			info.disp();
 	}
 }
 // ------- End of function RemoteMsg::spy_drop_identity ------//
@@ -2828,16 +2868,28 @@ void	RemoteMsg::compare_remote_object()
 	err_when( id < MSG_COMPARE_NATION || id > MSG_COMPARE_TALK );
 
 	// ###### patch begin Gilbert 20/1 #######//
-	if( (remote.sync_test_level & 2) && (remote.sync_test_level >= 0)
-		&& crc_store.compare_remote(id, data_buf) )
+	if( crc_store.compare_remote(id, data_buf) )
 	{
-		remote.sync_test_level = ~2;	// signal error encountered
 		if( sys.debug_session )
 			err.run( _("Multiplayer Object Sync Error") );
 	}
 	// ###### patch end Gilbert 20/1 #######//
 }
 //------- End of function RemoteMsg::compare_remote_object -------//
+
+
+//------- Begin of function RemoteMsg::compare_remote_crc -------//
+void RemoteMsg::compare_remote_crc()
+{
+	err_when( id != MSG_COMPARE_CRC );
+
+	if( (remote.sync_test_level & 2) && (remote.sync_test_level >= 0)
+		&& crc_store.compare_frame(data_buf) )
+	{
+		remote.sync_test_level = ~2;	// signal error encountered
+	}
+}
+//------- End of function RemoteMsg::compare_remote_crc -------//
 
 
 //------- Begin of function RemoteMsg::unit_add_way_point -------//

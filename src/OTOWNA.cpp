@@ -33,6 +33,7 @@
 #include <ONATION.h>
 #include <OGAME.h>
 #include <ConfigAdv.h>
+#include <OPOWER.h>
 
 #ifdef DEBUG
 #include <OFONT.h>
@@ -44,6 +45,9 @@ static unsigned long	last_town_profile_time = 0L;
 static unsigned long	town_profile_time = 0L;
 //#### end alex 20/9 ####//
 #endif
+
+static char random_race();
+
 
 //--------- Begin of function TownArray::TownArray ----------//
 
@@ -291,7 +295,7 @@ void TownArray::think_new_independent_town()
 
 	//----- check if there are enough wanderers to set up a new town ---//
 
-	int raceId = misc.random(MAX_RACE)+1;
+	int raceId = random_race();
 
 	for( i=0 ; i<MAX_RACE ; i++ )
 	{
@@ -341,7 +345,7 @@ void TownArray::think_new_independent_town()
 
 		//---- next race to be added to the independent town ----//
 
-		raceId = misc.random(MAX_RACE)+1;
+		raceId = random_race();
 
 		for( i=0 ; i<MAX_RACE ; i++ )
 		{
@@ -808,3 +812,82 @@ Town* TownArray::operator[](int recNo)
 
 #endif
 
+
+//--------- Begin of function TownArray::disp_next --------//
+//
+// Display the next object of the same type.
+//
+// <int> seekDir : -1 - display the previous one in the list.
+// 					  1 - display the next one in the list.
+//
+// <int> sameNation - whether display the next object of the same
+//							 nation only or of any nation.
+//
+void TownArray::disp_next(int seekDir, int sameNation)
+{
+	if( !selected_recno )
+		return;
+
+	int 	townRecno = selected_recno;
+	int   nationRecno = ((*this)[townRecno])->nation_recno;
+	Town* townPtr;
+
+	while(1)
+	{
+		if( seekDir < 0 )
+		{
+			townRecno--;
+
+			if( townRecno < 1 )
+				townRecno = size();
+		}
+		else
+		{
+			townRecno++;
+
+			if( townRecno > size() )
+				townRecno = 1;
+		}
+
+		if( is_deleted(townRecno) )
+			continue;
+
+		townPtr = (*this)[townRecno];
+
+		//-------- if are of the same nation --------//
+
+		if( sameNation && townPtr->nation_recno != nationRecno )
+			continue;
+
+		//--- check if the location of this town has been explored ---//
+
+		if( !world.get_loc(townPtr->center_x, townPtr->center_y)->explored() )
+			continue;
+
+		//---------------------------------//
+
+		power.reset_selection();
+		selected_recno = townRecno;
+
+		world.go_loc( townPtr->center_x, townPtr->center_y );
+		return;
+
+		//--- if the recno loops back to the starting one ---//
+
+		if( townRecno == selected_recno )
+			break;
+	}
+}
+//----------- End of function TownArray::disp_next --------//
+
+
+//-------- Begin of static function random_race --------//
+//
+// Uses misc.random() for random race
+//
+static char random_race()
+{
+	int num = misc.random(config_adv.race_random_list_max);
+	return config_adv.race_random_list[num];
+}
+//--------- End of static function random_race ---------//

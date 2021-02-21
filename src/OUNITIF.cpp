@@ -108,18 +108,18 @@ static short build_firm_button_order[MAX_FIRM_TYPE] =
 };
 // ##### end Gilbert 3/10 #######//
 
-static char button_build_hotkey[MAX_FIRM_TYPE] =
+static KeyEventType button_build_hotkey[MAX_FIRM_TYPE] =
 {
-	'F', // fort
-	'R', // mine (raw)
-	'A', // factory
-	'M', // market
-	'T', // tower of science
-	'W', // war factory
-	'I', // inn
-	'H', // harbour
-	'P', // seat of power
-	 0, // monster
+	KEYEVENT_BUILD_CAMP,
+	KEYEVENT_BUILD_MINE,
+	KEYEVENT_BUILD_FACTORY,
+	KEYEVENT_BUILD_MARKET,
+	KEYEVENT_BUILD_RESEARCH,
+	KEYEVENT_BUILD_WAR_FACTORY,
+	KEYEVENT_BUILD_INN,
+	KEYEVENT_BUILD_HARBOR,
+	KEYEVENT_BUILD_BASE,
+	KEYEVENT_BUILD_MONSTER,
 };
 
 
@@ -196,6 +196,9 @@ void Unit::detect_info()
 			detect_build_menu();
 			break;
 	}
+
+	if( detect_select_hotkey() )
+		return;
 }
 //----------- End of function Unit::detect_info -----------//
 
@@ -583,7 +586,7 @@ void Unit::detect_button()
 
 	//--------- "return camp" button ---------//
 
-	if( home_camp_firm_recno && button_return_camp.detect('R') )
+	if( home_camp_firm_recno && button_return_camp.detect(GETKEY(KEYEVENT_UNIT_RETURN)) )
 	{
 		// sound effect
 		se_res.far_sound(next_x_loc(), next_y_loc(), 1, 'S', sprite_id, "ACK");
@@ -601,7 +604,7 @@ void Unit::detect_button()
 
 	//-------- build button --------//
 
-	if( button_build.detect('B') )
+	if( button_build.detect(GETKEY(KEYEVENT_UNIT_BUILD)) )
 	{
 		unit_menu_mode = UNIT_MENU_BUILD;
 		info.disp();
@@ -609,7 +612,7 @@ void Unit::detect_button()
 
 	//-------- settle button ---------//
 
-	if( button_settle.detect('T') )
+	if( button_settle.detect(GETKEY(KEYEVENT_UNIT_SETTLE)) )
 	{
 		power.issue_command(COMMAND_SETTLE, sprite_recno);
 		info.disp();
@@ -883,6 +886,8 @@ static void group_drop_spy_identity()
 			if( !remote.is_enable() )
 			{
 				spy_array[unitPtr->spy_recno]->drop_spy_identity();
+				if( unitPtr->sprite_recno == unit_array.selected_recno )
+					info.disp();
 			}
 			else
 			{
@@ -967,7 +972,7 @@ void Unit::detect_build_menu()
 
 		if( button_build_flag[i] && firm_res[firmId]->can_build(sprite_recno) )
 		{
-			if( button_build_array[i].detect(button_build_hotkey[i]) )
+			if( button_build_array[i].detect(GETKEY(button_build_hotkey[i])) )
 			{
 				power.issue_command(COMMAND_BUILD_FIRM, sprite_recno, firmId);
 				rc = 1;
@@ -1021,17 +1026,20 @@ void Unit::disp_build(int refreshFlag)
 {
 	if( refreshFlag == INFO_REPAINT )
 	{
-		vga_util.d3_panel_up( INFO_X1, INFO_Y1, INFO_X2, INFO_Y1+42 );
 
 		String str;
 
 		str = _(select_where_to_build[power.command_para-1]);
 
-// FRENCH
-//		font_san.put_paragraph( INFO_X1, INFO_Y1, INFO_X2, INFO_Y2, str, 0 );
+		int dispLines, totalLines;
+		font_san.count_line( INFO_X1+7, INFO_Y1+5, INFO_X2-7, INFO_Y2-5, str, 0, dispLines, totalLines );
+		int textHeight = font_san.text_height()*dispLines+14;
+
+		vga_util.d3_panel_up( INFO_X1, INFO_Y1, INFO_X2, INFO_Y1+textHeight );
+
 		font_san.put_paragraph( INFO_X1+7, INFO_Y1+5, INFO_X2-7, INFO_Y2-5, str );
 
-		button_cancel2.paint_text( INFO_X1, INFO_Y1+45, INFO_X2, INFO_Y1+70, _("Cancel") );
+		button_cancel2.paint_text( INFO_X1, INFO_Y1+textHeight+3, INFO_X2, INFO_Y1+textHeight+28, _("Cancel") );
 	}
 }
 //----------- End of function Unit::disp_build -----------//
@@ -1552,6 +1560,40 @@ void Unit::disp_hit_point(int dispY1)
 	Vga::active_buf->indicator(0x0f, INFO_X1+30, dispY1+1, hit_points, max_hit_points, 0);
 }
 //----------- End of function Unit::disp_hit_point -----------//
+
+
+//--------- Begin of function Unit::detect_select_hotkey ---------//
+//
+int Unit::detect_select_hotkey()
+{
+	if( ISKEY(KEYEVENT_OBJECT_PREV) )
+	{
+		unit_array.disp_next(-1, 0);    // previous same object type of any nation
+		return 1;
+	}
+
+	if( ISKEY(KEYEVENT_OBJECT_NEXT) )
+	{
+		unit_array.disp_next(1, 0);     // next same object type of any nation
+		return 1;
+	}
+
+	if( ISKEY(KEYEVENT_NATION_OBJECT_PREV) )
+	{
+		unit_array.disp_next(-1, 1);    // prevous same object type of the same nation
+		return 1;
+	}
+
+	if( ISKEY(KEYEVENT_NATION_OBJECT_NEXT) )
+	{
+		unit_array.disp_next(1, 1);     // next same object type of the same nation
+		return 1;
+	}
+
+	return 0;
+}
+//----------- End of function Unit::detect_select_hotkey -----------//
+
 
 #ifdef DEBUG
 

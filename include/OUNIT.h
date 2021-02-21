@@ -382,6 +382,8 @@ public:
 			  int  true_nation_recno();            // the true nation recno of the unit, taking care of the situation where the unit is a spy
 	virtual int  is_ai_all_stop();
 			  int  get_cur_loc(short& xLoc, short& yLoc);
+			  int  get_cur_loc2(short& xLoc, short& yLoc);
+			  short is_leader_in_range();
 
 	virtual void die()         {;}
 
@@ -711,6 +713,7 @@ protected:
 	void  detect_spy_menu(int dispY1);
 	int   spy_menu_height();
 	void  disp_hit_point(int dispY1);
+	int   detect_select_hotkey();
 
 	void  process_attack_unit();
 	void  process_attack_firm();
@@ -822,6 +825,8 @@ public:
 
 	int   is_deleted(int recNo);
 	int   is_truly_deleted(int recNo);
+
+	void  disp_next(int seekDir, int sameNation);
 
 private:
 	void  divide_array(int locX, int locY, short* selectedArray, int selectedCount, int excludeSelectedLocUnit=0);

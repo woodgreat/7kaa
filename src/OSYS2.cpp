@@ -101,11 +101,6 @@ void Sys::detect()
 		return;
 	}
 
-	if( VBrowse::press_record )		// if the user is pulling the records of the browser up and down, calling detect() routines of other controls will confuse it
-	{
-		VBrowse::press_vbrowse_ptr->detect();
-	}
-
 	if( mouse.is_key_event() )
 	{
 		process_key(mouse.scan_code, mouse.event_skey_state);
@@ -508,6 +503,10 @@ void Sys::set_view_mode(int viewMode, int viewingNationRecno, int viewingSpyRecn
 
 		info.viewing_spy_recno = viewingSpyRecno;
 	}
+	if( viewMode == MODE_NATION && info.nation_report_mode == NATION_REPORT_CHAT )
+		SDL_StartTextInput();
+	else
+		SDL_StopTextInput();
 
 	view_mode = viewMode;
 	disp_view_mode();

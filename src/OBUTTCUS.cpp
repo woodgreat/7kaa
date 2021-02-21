@@ -186,12 +186,9 @@ int ButtonCustom::detect(unsigned keyCode1, unsigned keyCode2, int detectRight, 
 		else
 			rc = 2;
 	}
-	else if( mouse.key_code )
+	else if( mouse.unique_key_code )
 	{
-		unsigned mouseKey=mouse.key_code;
-
-		if( mouseKey >= 'a' && mouseKey <= 'z' )   // non-case sensitive comparsion
-			mouseKey -= 32;                         // convert from lower case to upper case
+		unsigned mouseKey=mouse.unique_key_code;
 
 		if( mouseKey == keyCode1 || mouseKey == keyCode2 || mouseKey == button_key )
 		{

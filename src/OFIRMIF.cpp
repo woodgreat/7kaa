@@ -168,7 +168,8 @@ void Firm::detect_info_both()
 		switch( firm_menu_mode )
 		{
 			case FIRM_MENU_MAIN:
-				detect_info();
+				if( detect_info() )
+					return;
 				break;
 
 			case FIRM_MENU_SPY:
@@ -192,6 +193,30 @@ void Firm::detect_info_both()
 				detect_assassinate_result();
 				break;
 		}
+	}
+
+	if( ISKEY(KEYEVENT_OBJECT_PREV) )
+	{
+		firm_array.disp_next(-1, 0);    // previous same object type of any nation
+		return;
+	}
+
+	if( ISKEY(KEYEVENT_OBJECT_NEXT) )
+	{
+		firm_array.disp_next(1, 0);     // next same object type of any nation
+		return;
+	}
+
+	if( ISKEY(KEYEVENT_NATION_OBJECT_PREV) )
+	{
+		firm_array.disp_next(-1, 1);    // prevous same object type of the same nation
+		return;
+	}
+
+	if( ISKEY(KEYEVENT_NATION_OBJECT_NEXT) )
+	{
+		firm_array.disp_next(1, 1);     // next same object type of the same nation
+		return;
 	}
 }
 //----------- End of function Firm::detect_info_both -----------//

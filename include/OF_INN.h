@@ -77,13 +77,14 @@ public:
 	void 		init_derived();
 
 	void 		put_info(int);
-	void 		detect_info();
+	int		detect_info();
 	void		put_det(int);
 
 	void		next_day();
 	void		assign_unit(int unitRecno);
 
 	int		hire(short recNo);
+	int		hire_remote(short unitId, short combat_level, short skill_id, short skill_level, short hire_cost, short spy_recno);
 
 	virtual	void auto_defense(short targetRecno);
 	virtual	FirmInn* cast_to_FirmInn() { return this; };

@@ -43,6 +43,7 @@
 #include <OBOX.h>
 #include <OMOUSE.h>
 #include <dbglog.h>
+#include <ConfigAdv.h>
 
 #include <posix_string_compat.h>
 
@@ -71,6 +72,8 @@ enum { TUTOR_BUTTON_X1 = TUTOR_X2-66,
 static Button button_new_tutor, button_quit_tutor;
 static Button button_restart, button_prev, button_next;
 static Button3D button_sample;
+static int text_start_line, text_disp_lines, text_max_lines;
+static Button3D textScrollUp, textScrollDown;
 
 DBGLOG_DEFAULT_CHANNEL(Tutor);
 
@@ -431,13 +434,28 @@ void Tutor::run(int tutorId, int inGameCall)
 	tutor.load(tutorId);			
 
 	game.game_mode = GAME_TUTORIAL;
+	text_max_lines=0;
 
 	//------------------------------------------//
 
 	if( !inGameCall )
 	{
+		ConfigAdv backup;
+		if( config_adv.scenario_config )
+		{
+			String str2;
+			str2  = DIR_TUTORIAL;
+			str2 += "config.txt";
+
+			backup = config_adv;
+			config_adv.load(str2);
+		}
+
 		battle.run_loaded();
 		game.deinit();
+
+		if( config_adv.scenario_config )
+			config_adv = backup;
 	}
 }
 //----------- End of function Tutor::run ------------//
@@ -467,20 +485,21 @@ void Tutor::disp()
 
 	//-------- display tutorial text --------//
 
+	if( !text_max_lines )
+	{
+		font_san.count_line( TUTOR_X1+10, TUTOR_Y1+10, textX2, TUTOR_Y2-10,
+					tutorTextBlock->text_ptr, 4, text_disp_lines, text_max_lines );
+		text_start_line = 0;
+	}
 	font_san.put_paragraph( TUTOR_X1+10, TUTOR_Y1+10, textX2, TUTOR_Y2-10,
-									tutorTextBlock->text_ptr, 4 );
+									tutorTextBlock->text_ptr, 4, text_start_line+1 );
 
 	//--------- display controls ---------//
 
 	int x=TUTOR_X1+10, y=TUTOR_Y2-22;
 
-	#ifdef GERMAN
-		button_new_tutor.paint_text( x, y, "Next Training" );
-		button_quit_tutor.paint_text( x+120, y, "Quit Training" );
-	#else
-		button_new_tutor.paint_text( x, y, _("Next Training") );
-		button_quit_tutor.paint_text( x+100, y, _("Quit Training") );
-	#endif
+	button_new_tutor.paint_text( x, y, _("Next Training") );
+	button_quit_tutor.paint_text( button_new_tutor.x2+6, y, _("Quit Training") );
 
 	//---- display current text block position ----//
 
@@ -499,6 +518,14 @@ void Tutor::disp()
 	//------- display other controls --------//
 
 	button_restart.paint_text( x, y, "|<<" );
+
+	if( text_max_lines > text_disp_lines )
+		textScrollUp.paint(TUTOR_X2-28, y,
+			"SV-UP-U", "SV-UP-D", 1, 0);
+
+	if( text_max_lines > text_disp_lines )
+		textScrollDown.paint(TUTOR_X2-14, y,
+			"SV-DW-U", "SV-DW-D", 1, 0);
 
 	if( cur_text_block_id > 1 )
 		button_prev.paint_text( x+45, y, " < " );
@@ -584,7 +611,25 @@ int Tutor::detect()
 	if( button_restart.detect() )
 	{
 		cur_text_block_id = 1;
+		text_max_lines = 0;
 		return 1;
+	}
+
+	if( text_max_lines > text_disp_lines )
+	{
+		if( textScrollUp.detect() )
+		{
+			if( --text_start_line < 0 )
+				text_start_line = 0;
+			return 1;
+		}
+
+		if( textScrollDown.detect() )
+		{
+			if( ++text_start_line > text_max_lines-text_disp_lines )
+				text_start_line = text_max_lines-text_disp_lines;
+			return 1;
+		}
 	}
 
 	if( cur_text_block_id > 1 && button_prev.detect() )
@@ -611,6 +656,7 @@ void Tutor::prev_text_block()
 {
 	if( cur_text_block_id > 1 )
 		cur_text_block_id--;
+	text_max_lines = 0;
 }
 //----------- End of function Tutor::prev_text_block ------------//
 
@@ -621,6 +667,7 @@ void Tutor::next_text_block()
 {
 	if( cur_text_block_id < text_block_count )
 		cur_text_block_id++;
+	text_max_lines = 0;
 }
 //----------- End of function Tutor::next_text_block ------------//
 
